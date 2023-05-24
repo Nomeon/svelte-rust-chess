@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import { draggable } from '@neodrag/svelte';
     import { checkMove } from '../Logic.svelte';
-    import init, { greet } from 'rust';
+    import init, { valid_moves, get_index, possible_moves } from 'rust';
 
     // To get WASM working:
     // https://www.reddit.com/r/sveltejs/comments/vzf86d/sveltekit_with_webassembly_rust/
@@ -10,65 +10,68 @@
 
 
     $: board = [];
+    let matrix = {};
 
     onMount(async() => {
         await init();
-        // greet("Svelte");
         board = createBoard();
         initializeBoard();
-        console.log(board);
     })
 
     function createBoard() {
-        let board = new Array(8);
+        let board = new Array(64);
         for (let i = 0; i < board.length; i++) {
-            board[i] = new Array(8);
-            for (let j = 0; j < board[i].length; j++) {
-                board[i][j] = {
-                    id: i * 8 + j,
-                    row: i,
-                    col: j,
-                    piece: null,
-                    color: undefined,
-                    draggable: false,
-                    possibleMoves: [],
-                };
-            }
+            board[i] = {
+                id: i,
+                row: Math.floor(i / 8),
+                col: i % 8,
+                piece: "",
+                color: "",
+                draggable: false,
+            };
         }
         return board;
     }
     
     function initializeBoard() {
-        board[0][0].piece = "rook";
-        board[0][1].piece = "knight";
-        board[0][2].piece = "bishop";
-        board[0][3].piece = "queen";
-        board[0][4].piece = "king";
-        board[0][5].piece = "bishop";
-        board[0][6].piece = "knight";
-        board[0][7].piece = "rook";
-        for (let i = 0; i < board[1].length; i++) {
-            board[1][i].piece = "pawn";
+        board[0].piece = "rook";
+        board[1].piece = "knight";
+        board[2].piece = "bishop";
+        board[3].piece = "queen";
+        board[4].piece = "king";
+        board[5].piece = "bishop";
+        board[6].piece = "knight";
+        board[7].piece = "rook";
+        for (let i = 8; i < 16; i++) {
+            board[i].piece = "pawn";
         }
 
-        board[7][0].piece = "rook";
-        board[7][1].piece = "knight";
-        board[7][2].piece = "bishop";
-        board[7][3].piece = "queen";
-        board[7][4].piece = "king";
-        board[7][5].piece = "bishop";
-        board[7][6].piece = "knight";
-        board[7][7].piece = "rook";
-        for (let i = 0; i < board[6].length; i++) {
-            board[6][i].piece = "pawn";
+        board[56].piece = "rook";
+        board[57].piece = "knight";
+        board[58].piece = "bishop";
+        board[59].piece = "queen";
+        board[60].piece = "king";
+        board[61].piece = "bishop";
+        board[62].piece = "knight";
+        board[63].piece = "rook";
+        for (let i = 55; i > 47; i--) {
+            board[i].piece = "pawn";
         }
 
-        for (let h = 0; h < board[0].length; h++) {
-            board[0][h].color = "white";
-            board[1][h].color = "white";
-            board[6][h].color = "black";
-            board[7][h].color = "black";
+        for (let h = 0; h < 16; h++) {
+            board[h].color = "white";
+            board[63-h].color = "black";
         }
+
+        board.forEach(({row, col}) => {
+            if (matrix[row]) matrix[row].push(col)
+            else matrix[row] = [col]
+        })
+    }
+
+    function pickPiece(e, square) {
+        // const pos_moves = possible_moves(board, square);
+        console.log(e)
     }
 
     function dropPiece(e, square) {
@@ -77,12 +80,16 @@
 
         if (!((y <= 25 && y >= 0) || (y >= -25) && (y <= 0)) || !((x <= 25 && x >= 0) || (x >= -25) && (x <= 0))) {
             let newXY = [Math.round(x/50), Math.round(y/50)];
-
+            newXY = [newXY[0] + square.col, newXY[1] + square.row];
             if (checkMove(board, square, newXY)) {
-                board[square.row + newXY[1]][square.col + newXY[0]].piece = square.piece;
-                board[square.row + newXY[1]][square.col + newXY[0]].color = square.color;
-                square.piece = null;
-                square.color = undefined;
+                let resp = valid_moves(board, square, newXY[0], newXY[1]);
+                console.log(resp);
+
+                let index = get_index(newXY[0], newXY[1]);
+                board[index].piece = square.piece;
+                board[index].color = square.color;
+                square.piece = "";
+                square.color = "";
                 return;
             }
         } 
@@ -93,14 +100,14 @@
 </script>
 <table class='board'>
     <tbody>
-        {#each board as row}
+        {#each Object.keys(matrix) as row, i}
         <tr>
-            {#each row as square}
-            <td class="square {((square.row % 2) + square.id) % 2 === 0 ? 'white' : 'black'}">
-                {#if square.piece !== null}
-                <div use:draggable on:neodrag:end={(e) => dropPiece(e, square)} class='piece-square'>
-                    <img src={`/pieces/${square.color}_${square.piece}.png`} alt="{square.piece}" class="piece-image"/>
-                </div>
+            {#each matrix[row] as k, j}
+            <td class="square {((board[i * 8 + j].row % 2) + board[i * 8 + j].id) % 2 === 0 ? 'white' : 'black'}">
+                {#if board[i * 8 + j].piece !== ""}
+                    <div use:draggable={{ bounds: 'table' }} on:neodrag:start={(e) => pickPiece(e, board[i * 8 + j])} on:neodrag:end={(e) => dropPiece(e, board[i * 8 + j])} class='piece-square'>
+                        <img src={`/pieces/${board[i * 8 + j].color}_${board[i * 8 + j].piece}.png`} alt="{board[i * 8 + j].piece}" class="piece-image"/>
+                    </div>
                 {/if}
             </td>
             {/each}

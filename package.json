@@ -3,7 +3,8 @@
 	"version": "0.0.1",
 	"private": true,
 	"scripts": {
-		"dev": "vite dev",
+		"check": "cd src/rust && cargo check && cd ../..",
+		"dev": "cd src/rust && wasm-pack build --target web && cd ../.. && vite dev",
 		"build": "vite build",
 		"preview": "vite preview"
 	},
@@ -12,13 +13,13 @@
 		"@sveltejs/kit": "^1.5.0",
 		"rust": "./src/rust/pkg",
 		"svelte": "^3.59.0",
-		"vite": "^4.3.0"
+		"vite": "^4.3.0",
+		"wasm-pack": "^0.11.1"
 	},
 	"type": "module",
 	"dependencies": {
 		"@neodrag/svelte": "^2.0.3",
 		"vite-plugin-top-level-await": "^1.3.1",
-		"vite-plugin-wasm": "^3.2.2",
-		"wasm-pack": "^0.11.1"
+		"vite-plugin-wasm": "^3.2.2"
 	}
 }
