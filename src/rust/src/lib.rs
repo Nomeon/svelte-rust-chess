@@ -1,80 +1,41 @@
 use gloo_utils::format::JsValueSerdeExt;
 use wasm_bindgen::prelude::*;
-use serde::{Serialize, Deserialize};
+// use serde::{Serialize, Deserialize};
+use shakmaty::{fen::Fen, Chess, Position, CastlingMode, Square, Move};
 
-// Javascript functions
-#[wasm_bindgen]
-extern {
-    pub fn alert(s: &str);
-}
 
-// Rust functions
+// Rust functions that can be called from JS
 #[wasm_bindgen]
-pub fn greet(name: &str) {
-    alert(&format!("Hello, {}!", name));
-}
+pub fn get_possible_moves(fen_str: &str, square: &str) -> JsValue {
+    let board = get_pos_from_fen(fen_str);
+    let mut moves = board.legal_moves();
 
-#[wasm_bindgen]
-pub fn add(a: i32, b: i32) -> i32 {
-    a + b
+    let sq = Square::from_ascii(square.as_bytes()).unwrap();
+    moves.retain(|m| m.from() == Some(sq));
+    let legal_moves: Vec<String> = moves.into_iter().map(|m| m.to().to_string()).collect();
+    let legal_moves_js: JsValue = JsValue::from_serde(&legal_moves).unwrap();
+    return legal_moves_js;
 }
 
 #[wasm_bindgen]
-pub fn valid_moves(board_js: JsValue, square_js: JsValue, x: i32, y: i32) -> bool {
-    let board: Vec<Square> = board_js.into_serde().unwrap();
-    let square: Square = square_js.into_serde().unwrap();
+pub fn play_move(fen_str: &str, square: &str, target: &str) -> JsValue {
+    let mut board = get_pos_from_fen(fen_str);
+    let sq = Square::from_ascii(square.as_bytes()).unwrap();
+    let target_sq = Square::from_ascii(target.as_bytes()).unwrap();
 
-    for target in board.iter() {
-        if target.col == x {
-            if target.row == y {
-                if target.color != square.color {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
+    let mut moves = board.legal_moves();
+    moves.retain(|m| m.from() == Some(sq) && m.to() == target_sq);
+    let playable_move: &Move = &moves[0];
+    board = board.play(playable_move).unwrap();
+    let new_fen = Fen::from_position(board, shakmaty::EnPassantMode::Legal);
+    let new_fen_js: JsValue = JsValue::from_serde(&new_fen.to_string()).unwrap();
+    return new_fen_js
 }
 
-#[wasm_bindgen]
-pub fn get_index(column: i8, row: i8) -> i8 {
-    let index: i8 = column + (row * 8);
-    return index;
-}
-
-#[wasm_bindgen]
-pub fn possible_moves(board_js: JsValue, square_js: JsValue) -> Vec<i8> {
-    let mut pos_moves: Vec<i8> = Vec::new();
-    // let board: Vec<Square> = board_js.into_serde().unwrap();
-    let square: Square = square_js.into_serde().unwrap();
-    
-    pos_moves.append(&mut pawn_moves(square));
-    
-    return pos_moves;
-}
-
-
-pub fn pawn_moves(square: Square) -> Vec<i8> {
-    let mut pawn_moves = Vec::new();
-    let col: i8 = square.col as i8;
-    let row: i8 = square.row as i8;
-    if square.color == "white" {
-        if row == 2 {
-            let index = get_index(col, row + 2);
-            pawn_moves.push(index)
-        }
-    }
-    return pawn_moves
-}
-
-// Rust Structs
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Square {
-    pub id: i32,
-    pub col: i32,
-    pub row: i32,
-    pub color: String,
-    pub piece: String,
-    pub draggable: bool,
+// Local functions
+fn get_pos_from_fen(fen_str: &str) -> Chess {
+    let fen_bytes = fen_str.as_bytes();
+    let fen = Fen::from_ascii(fen_bytes).unwrap();
+    let board: Chess = fen.into_position(CastlingMode::Standard).unwrap();
+    return board;
 }

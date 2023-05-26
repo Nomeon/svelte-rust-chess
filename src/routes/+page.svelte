@@ -1,112 +1,140 @@
 <script>
     import { onMount } from "svelte";
     import { draggable } from '@neodrag/svelte';
-    import { checkMove } from '../Logic.svelte';
-    import init, { valid_moves, get_index, possible_moves } from 'rust';
+    import init, { get_possible_moves, play_move } from 'rust';
 
     // To get WASM working:
     // https://www.reddit.com/r/sveltejs/comments/vzf86d/sveltekit_with_webassembly_rust/
     // https://developer.mozilla.org/en-US/docs/WebAssembly/Rust_to_wasm
 
-
     $: board = [];
-    let matrix = {};
+    $: turn = "";
+    $: boardFEN = "";
+
+    const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    const ranks = [8, 7, 6, 5, 4, 3, 2, 1];   
 
     onMount(async() => {
         await init();
-        board = createBoard();
         initializeBoard();
     })
 
-    function createBoard() {
-        let board = new Array(64);
-        for (let i = 0; i < board.length; i++) {
-            board[i] = {
-                id: i,
-                row: Math.floor(i / 8),
-                col: i % 8,
-                piece: "",
-                color: "",
-                draggable: false,
-            };
-        }
-        return board;
-    }
-    
     function initializeBoard() {
-        board[0].piece = "rook";
-        board[1].piece = "knight";
-        board[2].piece = "bishop";
-        board[3].piece = "queen";
-        board[4].piece = "king";
-        board[5].piece = "bishop";
-        board[6].piece = "knight";
-        board[7].piece = "rook";
-        for (let i = 8; i < 16; i++) {
-            board[i].piece = "pawn";
+        for (let i = 0; i < 64; i++) {
+            let rank = ranks[Math.floor(i / 8)];
+            let file = files[i % 8];
+            let square = file + String(rank);
+            let piece = "";
+            let id = i;
+            board[i] = {rank: rank, file: file, piece: piece, id: id, square: square, draggable: true, color: ""};
         }
+        boardFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        fenToBoard(boardFEN);
+    }
 
-        board[56].piece = "rook";
-        board[57].piece = "knight";
-        board[58].piece = "bishop";
-        board[59].piece = "queen";
-        board[60].piece = "king";
-        board[61].piece = "bishop";
-        board[62].piece = "knight";
-        board[63].piece = "rook";
-        for (let i = 55; i > 47; i--) {
-            board[i].piece = "pawn";
+    function fenToBoard(fen) {
+        let fenParts =  fen.split(" ");
+        let fenPart1 = fenParts[0]
+        let pieces = fenPart1.split("/").join("");
+        let fake_board = [];
+
+        for (let i = 0; i < pieces.length; i++) {
+            let char = pieces[i];
+            if (!isNaN(char)) {
+                for (let j = 0; j < parseInt(char); j++) {
+                    fake_board.push("");
+                }
+            }
+            else {
+                fake_board.push(char);
+            }
         }
-
-        for (let h = 0; h < 16; h++) {
-            board[h].color = "white";
-            board[63-h].color = "black";
+        for (let i = 0; i < 64; i++) {
+            board[i].piece = fake_board[i];
         }
+        // fenParts[1] === "w" ? setDraggable("b") : setDraggable("w");
+    }
 
-        board.forEach(({row, col}) => {
-            if (matrix[row]) matrix[row].push(col)
-            else matrix[row] = [col]
-        })
+    function setDraggable(turnVar) {
+        turn = turnVar;
+        if (turn === "w") {
+            board.forEach((square) => {
+                if (square.piece === square.piece.toUpperCase()) {
+                    square.draggable = true;
+                }
+                else {
+                    square.draggable = false;
+                }
+            })
+        }
+        else {
+            board.forEach((square) => {
+                if (square.piece === square.piece.toUpperCase()) {
+                    square.draggable = true;
+                }
+                else {
+                    square.draggable = false;
+                }
+            })
+        }
     }
 
     function pickPiece(e, square) {
-        // const pos_moves = possible_moves(board, square);
-        console.log(e)
+        let moves = get_possible_moves(boardFEN, square.square);
+        showMoves(moves);
     }
 
     function dropPiece(e, square) {
         let y = e.detail.offsetY;
         let x = e.detail.offsetX;
+        showMoves([]);
 
         if (!((y <= 25 && y >= 0) || (y >= -25) && (y <= 0)) || !((x <= 25 && x >= 0) || (x >= -25) && (x <= 0))) {
-            let newXY = [Math.round(x/50), Math.round(y/50)];
-            newXY = [newXY[0] + square.col, newXY[1] + square.row];
-            if (checkMove(board, square, newXY)) {
-                let resp = valid_moves(board, square, newXY[0], newXY[1]);
-                console.log(resp);
-
-                let index = get_index(newXY[0], newXY[1]);
-                board[index].piece = square.piece;
-                board[index].color = square.color;
-                square.piece = "";
-                square.color = "";
+            let newX = files[square.file.charCodeAt(0) - 97 + Math.round(x/50)];
+            let newY = ranks[ranks.indexOf(square.rank) + Math.round(y/50)];
+            let target = newX + String(newY);
+            let moves = get_possible_moves(boardFEN, square.square);
+            if (moves.includes(target)) {
+                boardFEN = play_move(boardFEN, square.square, target);
+                fenToBoard(boardFEN);
+                console.log(board)
                 return;
             }
         } 
         e.detail.rootNode.style.transform = "translate(0px, 0px)";
     }
 
+    function showMoves(moves) {
+        if (moves.length > 0) {
+            moves.forEach((move) => {
+                document.getElementById(move).style.boxShadow = "200px 200px 200px rgba(0, 255, 0, 0.5) inset";
+            })
+        }
+        else { 
+            for (let i = 0; i < 64; i++) {
+                let file = String.fromCharCode(97 + (i % 8)); // Convert the index to a file character (a-h)
+                let rank = 8 - Math.floor(i / 8); // Convert the index to a rank number (1-8)
+                let index = file + rank;
+                document.getElementById(index).style.boxShadow = "none";
+            }
+        }
+    }
 
 </script>
+{#if board.length > 0}
 <table class='board'>
     <tbody>
-        {#each Object.keys(matrix) as row, i}
+        {#each ranks as rank, i}
         <tr>
-            {#each matrix[row] as k, j}
-            <td class="square {((board[i * 8 + j].row % 2) + board[i * 8 + j].id) % 2 === 0 ? 'white' : 'black'}">
-                {#if board[i * 8 + j].piece !== ""}
-                    <div use:draggable={{ bounds: 'table' }} on:neodrag:start={(e) => pickPiece(e, board[i * 8 + j])} on:neodrag:end={(e) => dropPiece(e, board[i * 8 + j])} class='piece-square'>
-                        <img src={`/pieces/${board[i * 8 + j].color}_${board[i * 8 + j].piece}.png`} alt="{board[i * 8 + j].piece}" class="piece-image"/>
+            {#each files as file, j}
+            <td class="square {((files.indexOf(file) % 2 + ranks.indexOf(rank))) % 2 === 0 ? 'white' : 'black'}" id={board[i * 8 + j].square}>
+                {#if board[i * 8 + j].draggable && board[i * 8 + j].piece !== ""}
+                    <div class='piece-square' use:draggable={{ bounds: 'table' }} on:neodrag:start={(e) => pickPiece(e, board[i * 8 + j])} on:neodrag:end={(e) => dropPiece(e, board[i * 8 + j])}>
+                        <img src={`/pieces/${board[i * 8 + j].piece === board[i * 8 + j].piece.toUpperCase() ? "white" : "black"}_${board[i * 8 + j].piece}.png`} alt="{board[i * 8 + j].piece}" class="piece-image"/>
+                    </div>
+                {:else if board[i * 8 + j].piece !== ""}
+                    <div class='piece-square'>
+                        <img src={`/pieces/${board[i * 8 + j].piece === board[i * 8 + j].piece.toUpperCase() ? "white" : "black"}_${board[i * 8 + j].piece}.png`} alt="{board[i * 8 + j].piece}" class="piece-image"/>
                     </div>
                 {/if}
             </td>
@@ -115,6 +143,7 @@
         {/each}
     </tbody>
 </table>
+{/if}
 
 <style>
     .board {
